@@ -58,7 +58,7 @@ export default function AssistantPage() {
     // 1. Fetch Heroes
     const fetchHeroes = async () => {
       try {
-        const response = await fetch(`http://127.0.0.1:8000/api/heroes`);
+        const response = await fetch(`https://dota2backend-production.up.railway.app/api/heroes`);
         if (!response.ok) {
           throw new Error(`Failed to fetch heroes: ${response.statusText}`);
         }
@@ -75,7 +75,7 @@ export default function AssistantPage() {
       const newSessionId = uuidv4();
       setSessionId(newSessionId);
       try {
-        const response = await fetch(`http://127.0.0.1:8000/api/chat/create_session`, {
+        const response = await fetch(`https://dota2backend-production.up.railway.app/api/chat/create_session`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -117,7 +117,7 @@ export default function AssistantPage() {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/chat/message`, {
+      const response = await fetch(`https://dota2backend-production.up.railway.app/api/chat/message`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
