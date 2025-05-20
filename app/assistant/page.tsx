@@ -1,19 +1,18 @@
 "use client"
 
 import type React from "react"
-import { useState, useRef, useEffect, useCallback } from "react" // Added useCallback
+import { useState, useRef, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Send, Bot, User, Zap, Info, Sword, Shield } from "lucide-react"
-import { v4 as uuidv4 } from 'uuid'; // For generating session IDs
+import { v4 as uuidv4 } from 'uuid';
 
-// Define a type for the hero data coming from the backend
 type ApiHero = {
   id: number;
-  name: string; // This is the internal name like "npc_dota_hero_antimage"
+  name: string;
   localized_name: string;
   primary_attr: string;
   attack_type: string;
@@ -27,7 +26,9 @@ type Message = {
   timestamp: Date
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
+// const API_URL = process.env.NEXT_PUBLIC_API_URL; // Use this if you set up .env.local
+const HARDCODED_API_URL = "https://dota2backend-production.up.railway.app";
+
 
 export default function AssistantPage() {
   const [messages, setMessages] = useState<Message[]>([
@@ -41,24 +42,31 @@ export default function AssistantPage() {
   ])
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const [selectedHero, setSelectedHero] = useState<string | null>(null) // Store localized_name
+  const [selectedHero, setSelectedHero] = useState<string | null>(null)
   const [assistantMode, setAssistantMode] = useState<"chat" | "pick" | "counter">("chat")
-  const [heroes, setHeroes] = useState<ApiHero[]>([]); // State for heroes from API
-  const [sessionId, setSessionId] = useState<string | null>(null); // State for session ID
+  const [heroes, setHeroes] = useState<ApiHero[]>([]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll to bottom of messages
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
+    // Using setTimeout to ensure scroll happens after DOM update and layout calculation
+    const timerId = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 0); // A delay of 0ms pushes it to the next tick in the event loop
 
-  // Fetch heroes and create session on component mount
+    return () => {
+      clearTimeout(timerId); // Clean up the timeout if messages change again before it fires
+    };
+  }, [messages]); // Dependency array remains [messages]
+
   useEffect(() => {
+    const apiUrl = HARDCODED_API_URL; // Or API_URL if using .env.local
     // 1. Fetch Heroes
     const fetchHeroes = async () => {
       try {
-        const response = await fetch(`https://dota2backend-production.up.railway.app/api/heroes`);
+        const response = await fetch(`${apiUrl}/api/heroes`);
         if (!response.ok) {
           throw new Error(`Failed to fetch heroes: ${response.statusText}`);
         }
@@ -66,7 +74,6 @@ export default function AssistantPage() {
         setHeroes(data);
       } catch (error) {
         console.error("Error fetching heroes:", error);
-        // Optionally, set an error message in the UI
       }
     };
 
@@ -75,7 +82,7 @@ export default function AssistantPage() {
       const newSessionId = uuidv4();
       setSessionId(newSessionId);
       try {
-        const response = await fetch(`https://dota2backend-production.up.railway.app/api/chat/create_session`, {
+        const response = await fetch(`${apiUrl}/api/chat/create_session`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -89,24 +96,23 @@ export default function AssistantPage() {
         console.log("Session created:", data);
       } catch (error) {
         console.error("Error creating session:", error);
-        // Handle session creation error (e.g., retry, inform user)
       }
     };
 
     fetchHeroes();
     initializeSession();
-  }, []); // Empty dependency array means this runs once on mount
+  }, []);
 
   const getAIResponse = useCallback(async (userMessageContent: string) => {
+    const apiUrl = HARDCODED_API_URL; // Or API_URL
     if (!sessionId) {
       console.error("Session ID is not set. Cannot send message.");
-      // Potentially add a message to the user or try to re-initialize session
       setMessages((prev) => [
         ...prev,
         {
           id: Date.now().toString(),
           role: "assistant",
-          content: "Sorry, there was an issue with my connection. Please try refreshing the page.",
+          content: "Sorry, there was an issue with my connection (no session). Please try refreshing the page.",
           timestamp: new Date(),
         },
       ]);
@@ -117,7 +123,7 @@ export default function AssistantPage() {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`https://dota2backend-production.up.railway.app/api/chat/message`, {
+      const response = await fetch(`${apiUrl}/api/chat/message`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -129,11 +135,11 @@ export default function AssistantPage() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: "Unknown error" }));
+        const errorData = await response.json().catch(() => ({ detail: "Unknown error from API" }));
         throw new Error(`API Error: ${response.status} - ${errorData.detail || response.statusText}`);
       }
 
-      const data = await response.json(); // Expects { reply: string, is_dota_related: bool }
+      const data = await response.json();
 
       setMessages((prev) => [
         ...prev,
@@ -159,7 +165,7 @@ export default function AssistantPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [sessionId]); // Depend on sessionId
+  }, [sessionId]);
 
   const handleSendMessage = async () => {
     if (input.trim() === "" || !sessionId) return;
@@ -185,7 +191,7 @@ export default function AssistantPage() {
     }
   }
 
-  const handleHeroSelect = (heroName: string) => { // heroName is localized_name
+  const handleHeroSelect = (heroName: string) => {
     setSelectedHero(heroName);
 
     if (assistantMode === "counter") {
@@ -204,7 +210,6 @@ export default function AssistantPage() {
 
   const handleModeChange = (mode: "chat" | "pick" | "counter") => {
     setAssistantMode(mode);
-    // Clear input when mode changes for better UX
     setInput("");
     setSelectedHero(null);
 
@@ -220,8 +225,6 @@ export default function AssistantPage() {
       setMessages((prev) => [...prev, userMessage]);
       getAIResponse(question);
     }
-    // For "counter" mode, the action happens on hero selection
-    // For "chat" mode, user types their query
   }
 
   const handleQuickQuestion = (question: string) => {
@@ -234,7 +237,6 @@ export default function AssistantPage() {
         timestamp: new Date(),
     };
     setMessages((prev) => [...prev, userMessage]);
-    // setInput(question); // Optional: if you want the question to appear in the input box
     getAIResponse(question);
   }
 
@@ -325,59 +327,66 @@ export default function AssistantPage() {
 
           <div className="lg:col-span-3">
             <Card className="bg-gray-800 border-gray-700 h-[70vh] flex flex-col">
-              <CardContent className="p-6 flex-grow flex flex-col">
-                <div className="flex-grow overflow-y-auto mb-4 space-y-4">
-                  {messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
-                    >
+              <CardContent className="flex flex-col p-6 h-full">
+                {/* FIXED: Proper message container with strict constraints */}
+                <div className="flex-1 overflow-y-auto mb-4 pr-2">
+                  <div className="space-y-4">
+                    {messages.map((message) => (
                       <div
-                        className={`max-w-[80%] rounded-lg p-4 ${
-                          message.role === "user" ? "bg-red-600 text-white" : "bg-gray-700 text-white"
-                        }`}
+                        key={message.id}
+                        className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
                       >
-                        <div className="flex items-center mb-2">
-                          {message.role === "assistant" ? (
-                            <Bot className="h-5 w-5 mr-2" />
-                          ) : (
-                            <User className="h-5 w-5 mr-2" />
-                          )}
-                          <span className="font-medium">{message.role === "assistant" ? "AI Assistant" : "You"}</span>
+                        <div
+                          className={`max-w-[80%] rounded-lg p-4 ${
+                            message.role === "user" ? "bg-red-600 text-white" : "bg-gray-700 text-white"
+                          }`}
+                        >
+                          <div className="flex items-center mb-2">
+                            {message.role === "assistant" ? (
+                              <Bot className="h-5 w-5 mr-2" />
+                            ) : (
+                              <User className="h-5 w-5 mr-2" />
+                            )}
+                            <span className="font-medium">{message.role === "assistant" ? "AI Assistant" : "You"}</span>
+                          </div>
+                          <p className="whitespace-pre-line break-words">{message.content}</p>
+                          <div className="text-xs opacity-70 mt-2">{message.timestamp.toLocaleTimeString()}</div>
                         </div>
-                        <p className="whitespace-pre-line">{message.content}</p>
-                        <div className="text-xs opacity-70 mt-2">{message.timestamp.toLocaleTimeString()}</div>
                       </div>
-                    </div>
-                  ))}
-                  <div ref={messagesEndRef} />
+                    ))}
+                    {/* This empty div is the target for scrolling */}
+                    <div ref={messagesEndRef} />
+                  </div>
                 </div>
+                {/* END SCROLLABLE MESSAGE CONTAINER */}
 
-                <div className="flex items-end">
-                  <Textarea
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder={
-                        assistantMode === "chat" ? "Ask about heroes, strategies, or gameplay..." :
-                        assistantMode === "pick" ? "Ask for hero pick recommendations..." :
-                        "Select a hero above to ask how to counter them, or type a general query."
-                    }
-                    className="resize-none bg-gray-700 border-gray-600 text-white flex-grow mr-2"
-                    rows={3}
-                    disabled={assistantMode === "pick" || (assistantMode === "counter" && !selectedHero && input.trim() === "")}
-                  />
-                  <Button
-                    onClick={handleSendMessage}
-                    disabled={isLoading || input.trim() === "" || !sessionId}
-                    className="bg-red-600 hover:bg-red-700 h-12 w-12 p-0"
-                  >
-                    {isLoading ? (
-                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                    ) : (
-                      <Send className="h-5 w-5" />
-                    )}
-                  </Button>
+                <div className="mt-auto">
+                  <div className="flex items-end">
+                    <Textarea
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      placeholder={
+                          assistantMode === "chat" ? "Ask about heroes, strategies, or gameplay..." :
+                          assistantMode === "pick" ? "Ask for hero pick recommendations..." :
+                          "Select a hero above to ask how to counter them, or type a general query."
+                      }
+                      className="bg-gray-700 border-gray-600 text-white flex-grow mr-2"
+                      rows={3}
+                      disabled={assistantMode === "pick" || (assistantMode === "counter" && !selectedHero && input.trim() === "")}
+                    />
+                    <Button
+                      onClick={handleSendMessage}
+                      disabled={isLoading || input.trim() === "" || !sessionId}
+                      className="bg-red-600 hover:bg-red-700 h-12 w-12 p-0"
+                      >
+                      {isLoading ? (
+                          <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                      ) : (
+                          <Send className="h-5 w-5 text-white" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
